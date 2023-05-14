@@ -1,6 +1,13 @@
 import socket
 import threading
+import rsa
 
+# Generate RSA key pair
+public_key, private_key = rsa.newkeys(2048)
+
+# Convert keys to PEM format
+public_key_pem = public_key.save_pkcs1().decode('utf-8')
+private_key_pem = private_key.save_pkcs1().decode('utf-8')
 
 hostname = socket.gethostname()
 ip_address = socket.gethostbyname(hostname)
@@ -17,7 +24,6 @@ nicknames = []
 
 
 # broadcast
-
 def broadcast(message):
     for client in clients:
         client.send(message)
@@ -27,37 +33,37 @@ def broadcast(message):
 def handle(client):
     while True:
         try:
-            message = client.recv(1024)
-            print(f"{nicknames[clients.index(client)]}")
-            broadcast(message)
+            encrypted_message = client.recv(1024)
+            decrypted_message = rsa.decrypt(encrypted_message, private_key).decode('utf-8')
+            print(f"{nicknames[clients.index(client)]}: {decrypted_message}")
+            broadcast(encrypted_message)
         except:
             index = clients.index(client)
-            clients.remove(index)
-            clients.close()
+            clients.remove(client)
+            client.close()
             nickname = nicknames[index]
             nicknames.remove(nickname)
             break
 
 
-# recieve
-
+# receive
 def receive():
     while True:
         client, address = server.accept()
         print(f"Connected with: {str(address)}")
         client.send("NICK".encode('utf-8'))
-        nickname = client.recv(1024)
+        nickname = client.recv(1024).decode('utf-8')
         nicknames.append(nickname)
 
         print(f"Nickname of the client is: {nickname}")
         clients.append(client)
         broadcast(f"{nickname} connected to the server!\n".encode('utf-8'))
-        client.send("Connected to the server\n".encode('utf-8'))
+        client.send(public_key_pem.encode('utf-8'))
 
         thread = threading.Thread(target=handle, args=(client,))
         thread.start()
 
 
-print("server is running... ")
+print("Server is running... ")
 
 receive()
